@@ -181,6 +181,32 @@ test("filters unsafe context and suggests root/docs files", (t) => {
   assert.deepEqual(suggestContextFiles(root), ["CONTEXT.md", "README.md", "docs/usage.md"]);
 });
 
+test("sort prioritizes automatically with loaded Pi context", async (t) => {
+  const root = tempDir(t);
+  const store = tempDir(t);
+  let prompt = "";
+  const pi = {
+    exec: async (_command, args) => {
+      prompt = args.at(-1);
+      return { code: 0, stdout: '{"items":[{"id":2,"reason":"blocks work"},{"id":1,"reason":"later"}]}' };
+    },
+  };
+  const ctx = {
+    cwd: root,
+    hasUI: false,
+    ui: { notify: () => {} },
+    getSystemPromptOptions: () => ({ contextFiles: [{ path: "CONTEXT.md", content: "Loaded project context" }] }),
+  };
+
+  await handleTodoCommand("nice to have", ctx, pi, { baseDir: store });
+  const result = await handleTodoCommand("blocking bug", ctx, pi, { baseDir: store });
+
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.project.items.map((item) => item.id), [2, 1]);
+  assert.match(prompt, /Loaded project context/);
+  assert.doesNotMatch(prompt, /Priorisierungskriterium/);
+});
+
 test("sort failure keeps order without fake reasons", async (t) => {
   const root = tempDir(t);
   const store = tempDir(t);
@@ -194,7 +220,7 @@ test("sort failure keeps order without fake reasons", async (t) => {
   assert.equal(result.ok, false);
   assert.deepEqual(result.project.items.map((item) => item.text), ["first", "second"]);
   assert.deepEqual(result.project.items.map((item) => item.reason), ["", ""]);
-  assert.ok(messages.some((message) => /Kriterium fehlt/.test(message)));
+  assert.ok(messages.some((message) => /Priorisierung-Agent nicht verfügbar/.test(message)));
 });
 
 test("command flow adds, lists, confirms clear", async (t) => {

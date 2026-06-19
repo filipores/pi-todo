@@ -359,6 +359,36 @@ export function readContextFiles(project) {
   return result;
 }
 
+function loadedContextFiles(ctx, usedChars = 0) {
+  const options = ctx?.getSystemPromptOptions?.();
+  const files = Array.isArray(options?.contextFiles) ? options.contextFiles : [];
+  const result = [];
+  let remaining = Math.max(0, CONTEXT_CHARS_TOTAL - usedChars);
+
+  for (const file of files) {
+    if (remaining <= 0) break;
+    const text = [file?.content, file?.text, file?.contents].find((value) => typeof value === "string");
+    if (!text || SECRET_CONTENT.test(text)) continue;
+    const clipped = text.slice(0, Math.min(CONTEXT_CHARS_PER_FILE, remaining));
+    remaining -= clipped.length;
+    result.push({ path: file?.path || "Pi context", text: clipped });
+  }
+
+  return result;
+}
+
+function collectContextFiles(ctx, project) {
+  const selected = readContextFiles(project);
+  const used = selected.reduce((sum, file) => sum + file.text.length, 0);
+  const seen = new Set(selected.map((file) => file.path));
+  const loaded = loadedContextFiles(ctx, used).filter((file) => {
+    if (seen.has(file.path)) return false;
+    seen.add(file.path);
+    return true;
+  });
+  return [...selected, ...loaded];
+}
+
 export function parseAgentJson(output) {
   const text = String(output ?? "").trim();
   const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
@@ -373,7 +403,7 @@ export function parseAgentJson(output) {
   }
 }
 
-function buildPrioritizationPrompt(project, criterion, contextFiles, answers) {
+function buildPrioritizationPrompt(project, contextFiles, answers) {
   const inbox = project.items.map((item) => ({
     id: item.id,
     text: item.text,
@@ -382,7 +412,7 @@ function buildPrioritizationPrompt(project, criterion, contextFiles, answers) {
   const context = contextFiles.map((file) => `# ${file.path}\n${file.text}`).join("\n\n---\n\n") || "(kein Kontext ausgewählt)";
   const clarification = answers.length ? JSON.stringify(answers, null, 2) : "[]";
 
-  return `Du priorisierst eine persönliche Projekt-Inbox.\n\nRegeln:\n- Erzeuge eine lineare Rangliste aller offenen Inbox-Einträge, keine Buckets, keine Scores.\n- Respektiere manualRank exakt, wenn gesetzt.\n- Gründe sind kurz und in der Sprache der Inbox-Einträge bzw. des Kriteriums.\n- Wenn eine fachlich notwendige Information fehlt, antworte nur mit {"question":"..."}.\n- Wenn die Rangliste belastbar ist, antworte nur mit {"items":[{"id":1,"reason":"kurzer Grund"}]}.\n\nPriorisierungskriterium:\n${criterion}\n\nKontext:\n${context}\n\nBisherige Klärungen:\n${clarification}\n\nInbox:\n${JSON.stringify(inbox, null, 2)}`;
+  return `Du priorisierst eine persönliche Projekt-Inbox.\n\nRegeln:\n- Erzeuge eine lineare Rangliste aller offenen Inbox-Einträge, keine Buckets, keine Scores.\n- Respektiere manualRank exakt, wenn gesetzt.\n- Bestimme die Priorität selbst aus Projektkontext, Nutzerzielen und Inbox-Texten.\n- Default-Kriterium: größter nächster Nutzen für das Projekt, bei ähnlichem Nutzen zuerst Risiko/Blocker und danach kleine schnell shipbare Schritte.\n- Gründe sind kurz und in der Sprache der Inbox-Einträge.\n- Wenn eine fachlich notwendige Information fehlt, antworte nur mit {"question":"..."}.\n- Wenn die Rangliste belastbar ist, antworte nur mit {"items":[{"id":1,"reason":"kurzer Grund"}]}.\n\nKontext:\n${context}\n\nBisherige Klärungen:\n${clarification}\n\nInbox:\n${JSON.stringify(inbox, null, 2)}`;
 }
 
 function emit(ctx, text, level = "info") {
@@ -449,19 +479,13 @@ async function prioritizeProject(pi, ctx, project) {
     return true;
   }
 
-  const criterion = await askInput(ctx, "Priorisierungskriterium", "z.B. größter Hebel, dringendster nächster Schritt");
-  if (!criterion) {
-    emit(ctx, "Priorisierung übersprungen: Kriterium fehlt.", "warning");
-    return false;
-  }
-
-  const contextFiles = readContextFiles(project);
+  const contextFiles = collectContextFiles(ctx, project);
   const answers = [];
 
   for (let attempt = 0; attempt < 5; attempt += 1) {
     let parsed;
     try {
-      const output = await runPiNoTools(pi, buildPrioritizationPrompt(project, criterion, contextFiles, answers), ctx);
+      const output = await runPiNoTools(pi, buildPrioritizationPrompt(project, contextFiles, answers), ctx);
       parsed = parseAgentJson(output);
     } catch {
       emit(ctx, "Priorisierung-Agent nicht verfügbar; bestehende Reihenfolge beibehalten.", "warning");

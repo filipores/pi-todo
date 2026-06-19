@@ -20,4 +20,4 @@ pi install git:github.com/filipores/pi-todo
 /todo setup           choose project context files again
 ```
 
-Data is stored locally under `~/.pi/agent/pi-todo/`.
+Prioritization runs automatically from the current Pi/project context; `/todo setup` only adds extra project files. Data is stored locally under `~/.pi/agent/pi-todo/`.
