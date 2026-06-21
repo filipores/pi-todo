@@ -24,7 +24,7 @@ Notion-ish. Package-sized.
 ## Install
 
 ```bash
-pi install git:github.com/filipores/pi-todo
+pi install git:github.com/filipores/pi-desk
 ```
 
 ## Commands

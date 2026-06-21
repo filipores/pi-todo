@@ -2,7 +2,7 @@
   "name": "pi-desk",
   "version": "0.1.0",
   "description": "Your package workspace: inboxes, priorities, and next steps for Pi packages.",
-  "repository": "github:filipores/pi-todo",
+  "repository": "github:filipores/pi-desk",
   "keywords": [
     "pi-package",
     "pi",
@@ -14,9 +14,7 @@
   "license": "MIT",
   "files": [
     "assets/pi-desk-imagegen-notionish.png",
-    "CONTEXT.md",
     "LICENSE",
-    "PLAN.md",
     "README.md",
     "pi-extension/index.js",
     "pi-extension/package.json"
