@@ -44,7 +44,11 @@ export function parseTodoCommand(args = "") {
   if (/^setup$/i.test(text)) return { type: "setup" };
   if (/^clear$/i.test(text)) return { type: "clear" };
 
-  let match = text.match(/^done\s+(\d+)$/i);
+  let match = text.match(/^edit\s+(\d+)(?:\s+([\s\S]+))?$/i);
+  if (match) return { type: "edit", id: Number(match[1]), text: String(match[2] ?? "").trim() };
+  if (/^edit\b/i.test(text)) return { type: "invalid", error: "Usage: /todo edit <id> [text]" };
+
+  match = text.match(/^done\s+(\d+)$/i);
   if (match) return { type: "done", id: Number(match[1]) };
   if (/^done\b/i.test(text)) return { type: "invalid", error: "Usage: /todo done <id>" };
 
@@ -190,6 +194,16 @@ export function doneItem(project, id) {
   const index = project.items.findIndex((item) => item.id === id);
   if (index === -1) return false;
   project.items.splice(index, 1);
+  clearReasons(project);
+  return true;
+}
+
+export function editItem(project, id, text) {
+  const item = project.items.find((entry) => entry.id === id);
+  const clean = String(text ?? "").trim();
+  if (!item || !clean) return false;
+  item.text = clean;
+  delete item.manualRank;
   clearReasons(project);
   return true;
 }
@@ -599,6 +613,23 @@ export async function handleTodoCommand(args, ctx, pi, options = {}) {
     };
   }
 
+  if (command.type === "edit") {
+    const item = project.items.find((entry) => entry.id === command.id);
+    if (!item) {
+      return { ok: false, command, project, message: emit(ctx, `Inbox-Eintrag #${command.id} nicht gefunden.`, "warning") };
+    }
+
+    const text = command.text || (ctx?.hasUI ? String((await ctx.ui?.editor?.(`Inbox-Eintrag #${command.id}`, item.text)) ?? "").trim() : "");
+    const ok = editItem(project, command.id, text);
+    if (ok) saveProject(project, baseDir);
+    return {
+      ok,
+      command,
+      project,
+      message: emit(ctx, ok ? renderList(project) : "Edit abgebrochen.", ok ? "info" : "warning"),
+    };
+  }
+
   if (command.type === "move") {
     const ok = moveItem(project, command.id, command.rank);
     if (ok) saveProject(project, baseDir);
@@ -705,7 +736,7 @@ export default function piTodoExtension(pi) {
   pi.registerCommand("todo", {
     description: "Pi Desk: project-scoped priority workspace",
     getArgumentCompletions: (prefix) => {
-      const commands = ["all", "sort", "setup", "clear", "done ", "move "];
+      const commands = ["all", "sort", "setup", "clear", "done ", "edit ", "move "];
       const filtered = commands.filter((command) => command.startsWith(prefix));
       return filtered.length ? filtered.map((command) => ({ value: command, label: command.trim() || command })) : null;
     },

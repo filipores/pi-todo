@@ -44,6 +44,7 @@ Offene Einträge sind die Quelle der Wahrheit. Erledigte Einträge werden hart g
 - `/todo <text>` — Inbox-Eintrag nur anhängen, kein Agent
 - `/todo sort` — Sort-Agent starten
 - `/todo done <id>` — Eintrag hart löschen
+- `/todo edit <id> [text]` — einzelnen Eintrag ändern; ohne Text Editor öffnen
 - `/todo move <id> <rank>` — manuelle Prioritätsvorgabe setzen; künftige Sortierungen respektieren sie
 - `/todo clear` — nur mit Bestätigung
 - `/todo setup` — Kontextdateien neu suchen/vorschlagen/bestätigen
@@ -82,9 +83,9 @@ Nur bei `/todo sort`:
 
 Minimal:
 
-- Command-Parser: `/todo`, `/todo text`, `/todo done 3`, `/todo move 2 1`, `/todo clear`, `/todo setup`, `/todo sort`
+- Command-Parser: `/todo`, `/todo text`, `/todo done 3`, `/todo edit 3 text`, `/todo move 2 1`, `/todo clear`, `/todo setup`, `/todo sort`
 - Projekt-ID-Ermittlung: Git-Root und cwd-Fallback
-- JSON-Store: add/list/done/move/clear
+- JSON-Store: add/list/edit/done/move/clear
 - Kontextfilter: Secrets/ignored dirs ausgeschlossen
 
 ## Implementierungsentscheidung

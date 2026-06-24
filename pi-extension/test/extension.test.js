@@ -8,6 +8,7 @@ import piTodoExtension, {
   applyRanking,
   clearItems,
   doneItem,
+  editItem,
   findProjectRoot,
   handleTodoCommand,
   isSafeContextFile,
@@ -51,8 +52,11 @@ test("parses todo commands", () => {
   assert.deepEqual(parseTodoCommand("all"), { type: "all" });
   assert.deepEqual(parseTodoCommand("setup"), { type: "setup" });
   assert.deepEqual(parseTodoCommand("clear"), { type: "clear" });
+  assert.deepEqual(parseTodoCommand("edit 3 new text"), { type: "edit", id: 3, text: "new text" });
+  assert.deepEqual(parseTodoCommand("edit 3"), { type: "edit", id: 3, text: "" });
   assert.deepEqual(parseTodoCommand("done 3"), { type: "done", id: 3 });
   assert.deepEqual(parseTodoCommand("move 2 1"), { type: "move", id: 2, rank: 1 });
+  assert.equal(parseTodoCommand("edit nope").type, "invalid");
   assert.equal(parseTodoCommand("done nope").type, "invalid");
   assert.equal(parseTodoCommand("move 2").type, "invalid");
 });
@@ -169,7 +173,7 @@ test("save refuses symlinked projects directory", (t) => {
   assert.deepEqual(readdirSync(target), []);
 });
 
-test("add appends; done and move clear stale ranking reasons", () => {
+test("add appends; edit, done and move clear stale ranking reasons", () => {
   const project = { items: [], nextId: 1 };
   addItem(project, "first");
   addItem(project, "second");
@@ -177,6 +181,13 @@ test("add appends; done and move clear stale ranking reasons", () => {
 
   addItem(project, "third");
   assert.deepEqual(project.items.map((item) => item.reason), ["old", "old", ""]);
+
+  project.items[0].manualRank = 1;
+  project.items.forEach((item) => { item.reason = "old"; });
+  assert.equal(editItem(project, 1, "first edited"), true);
+  assert.equal(project.items[0].text, "first edited");
+  assert.equal(project.items[0].manualRank, undefined);
+  assert.deepEqual(project.items.map((item) => item.reason), ["", "", ""]);
 
   project.items.forEach((item) => { item.reason = "old"; });
   doneItem(project, 3);
@@ -418,7 +429,7 @@ test("sort failure keeps order without fake reasons", async (t) => {
   assert.ok(messages.some((message) => /Sort-Agent nicht verfügbar/.test(message)));
 });
 
-test("command flow adds, lists, confirms clear", async (t) => {
+test("command flow adds, edits, lists, confirms clear", async (t) => {
   const root = tempDir(t);
   const store = tempDir(t);
   const messages = [];
@@ -429,8 +440,28 @@ test("command flow adds, lists, confirms clear", async (t) => {
   assert.equal(result.project.items.length, 1);
   assert.equal(result.project.items[0].reason, "");
 
+  result = await handleTodoCommand("edit 1 ship MVP today", ctx, {}, { baseDir: store });
+  assert.equal(result.ok, true);
+  assert.deepEqual(loadProject(root, store).items.map((item) => item.text), ["ship MVP today"]);
+
+  const editorCtx = {
+    cwd: root,
+    hasUI: true,
+    ui: {
+      notify: (message) => messages.push(message),
+      editor: async (title, initial) => {
+        assert.equal(title, "Inbox-Eintrag #1");
+        assert.equal(initial, "ship MVP today");
+        return "ship MVP tomorrow";
+      },
+    },
+  };
+  result = await handleTodoCommand("edit 1", editorCtx, {}, { baseDir: store });
+  assert.equal(result.ok, true);
+  assert.deepEqual(loadProject(root, store).items.map((item) => item.text), ["ship MVP tomorrow"]);
+
   result = await handleTodoCommand("", ctx, {}, { baseDir: store });
-  assert.match(result.message, /#1 ship MVP/);
+  assert.match(result.message, /#1 ship MVP tomorrow/);
 
   const no = { cwd: root, hasUI: true, ui: { notify: () => {}, confirm: async () => false } };
   result = await handleTodoCommand("clear", no, {}, { baseDir: store });

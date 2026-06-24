@@ -22,6 +22,7 @@ pi install git:github.com/filipores/pi-desk
 /todo <text>          add an inbox entry
 /todo sort            start the sorting agent
 /todo done <id>       delete an entry
+/todo edit <id> [text] edit an entry
 /todo move <id> <n>   set a manual rank
 /todo clear           delete all entries after confirmation
 /todo setup           choose project context files again
